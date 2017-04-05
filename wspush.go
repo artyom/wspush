@@ -59,7 +59,7 @@ func New(ctx context.Context, log *log.Logger, dial DialFunc, prefix string) htt
 	h := &hub{
 		ctx: ctx,
 		log: log,
-		m:   make(map[string]chan []byte),
+		m:   make(map[string]chan string),
 	}
 	go h.loop(ctx, dial, prefix)
 	return h
@@ -71,13 +71,13 @@ type hub struct {
 	mu  sync.Mutex
 	// what if there are multiple connections with the same token?
 	// simple map[string]chan won't be sufficient then
-	m map[string]chan []byte
+	m map[string]chan string
 }
 
 // register creates and registers channel to receive messages for given key,
 // also returning function to deregister this channel
-func (h *hub) register(key string) (<-chan []byte, func()) {
-	ch := make(chan []byte, 1)
+func (h *hub) register(key string) (<-chan string, func()) {
+	ch := make(chan string, 1)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.m[key] = ch
@@ -90,7 +90,7 @@ func (h *hub) register(key string) (<-chan []byte, func()) {
 
 // deliver pushes payload to channel registered at key, if any. Push is done in
 // a non-blocking manner, if channel is full, message is dropped.
-func (h *hub) deliver(key string, payload []byte) {
+func (h *hub) deliver(key string, payload string) {
 	h.mu.Lock()
 	ch, ok := h.m[key]
 	h.mu.Unlock()
@@ -158,7 +158,7 @@ func (h *hub) ingestPubSub(ctx context.Context, conn io.ReadWriteCloser, prefix 
 // pubsubMsg describes 3-strings array returned by redis over pubsub channel
 type pubsubMsg struct {
 	typ, recip string
-	data       []byte
+	data       string
 }
 
 // decodePubsub decodes single pubsub message from redis protocol
@@ -193,7 +193,7 @@ func decodePubsub(r resp.BytesReader) (*pubsubMsg, error) {
 		case 0:
 			msg.recip = v
 		case 1:
-			msg.data = []byte(v)
+			msg.data = v
 		}
 	}
 	return msg, nil
