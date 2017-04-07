@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -59,32 +60,57 @@ func New(ctx context.Context, log *log.Logger, dial DialFunc, prefix string) htt
 	h := &hub{
 		ctx: ctx,
 		log: log,
-		m:   make(map[string]chan string),
+		m:   make(map[string][]subscription),
 	}
 	go h.loop(ctx, dial, prefix)
 	return h
 }
 
+// subscription describes single client connection subscribed to receive
+// messages
+type subscription struct {
+	id uint64
+	ch chan string
+}
+
 type hub struct {
-	ctx context.Context
-	log *log.Logger
-	mu  sync.Mutex
-	// what if there are multiple connections with the same token?
-	// simple map[string]chan won't be sufficient then
-	m map[string]chan string
+	ctx  context.Context
+	log  *log.Logger
+	next uint64 // next subscription id counter
+	mu   sync.Mutex
+	m    map[string][]subscription
 }
 
 // register creates and registers channel to receive messages for given key,
 // also returning function to deregister this channel
 func (h *hub) register(key string) (<-chan string, func()) {
+	id := atomic.AddUint64(&h.next, 1)
 	ch := make(chan string, 1)
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.m[key] = ch
+	// TODO: limit max. number of connections per token
+	h.m[key] = append(h.m[key], subscription{id: id, ch: ch})
 	return ch, func() {
 		h.mu.Lock()
 		defer h.mu.Unlock()
-		delete(h.m, key)
+		subs := h.m[key]
+		var idx int
+		for i, s := range subs {
+			if s.id == id {
+				idx = i
+				goto found
+			}
+		}
+		return
+	found:
+		subsLen := len(subs)
+		if subsLen <= 1 { // shortcut for single connection from one client case
+			delete(h.m, key)
+			return
+		}
+		subs[idx] = subs[subsLen-1]
+		subs = subs[:subsLen-1]
+		h.m[key] = subs
 	}
 }
 
@@ -92,14 +118,12 @@ func (h *hub) register(key string) (<-chan string, func()) {
 // a non-blocking manner, if channel is full, message is dropped.
 func (h *hub) deliver(key string, payload string) {
 	h.mu.Lock()
-	ch, ok := h.m[key]
-	h.mu.Unlock()
-	if !ok {
-		return
-	}
-	select {
-	case ch <- payload:
-	default:
+	defer h.mu.Unlock()
+	for _, s := range h.m[key] {
+		select {
+		case s.ch <- payload:
+		default:
+		}
 	}
 }
 
