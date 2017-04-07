@@ -82,15 +82,19 @@ type hub struct {
 }
 
 // register creates and registers channel to receive messages for given key,
-// also returning function to deregister this channel
-func (h *hub) register(key string) (<-chan string, func()) {
+// also returning function to deregister this channel and status: if false,
+// connection should be aborted immediately due to exceeded limit of per-token
+// connections
+func (h *hub) register(key string) (<-chan string, func(), bool) {
 	id := atomic.AddUint64(&h.next, 1)
 	ch := make(chan string, 1)
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	// TODO: limit max. number of connections per token
+	if len(h.m[key]) >= 15 {
+		return nil, nil, false
+	}
 	h.m[key] = append(h.m[key], subscription{id: id, ch: ch})
-	return ch, func() {
+	fn := func() {
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		subs := h.m[key]
@@ -112,6 +116,7 @@ func (h *hub) register(key string) (<-chan string, func()) {
 		subs = subs[:subsLen-1]
 		h.m[key] = subs
 	}
+	return ch, fn, true
 }
 
 // deliver pushes payload to channel registered at key, if any. Push is done in
@@ -236,7 +241,10 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	fn := func(ws *websocket.Conn) {
 		defer ws.Close()
-		ch, closeFn := h.register(token)
+		ch, closeFn, ok := h.register(token)
+		if !ok {
+			return
+		}
 		defer closeFn()
 		for {
 			select {
