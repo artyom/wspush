@@ -246,10 +246,23 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer closeFn()
+		ticker := time.NewTicker(45 * time.Second)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-h.ctx.Done():
 				return
+			case <-ticker.C:
+				// https://tools.ietf.org/html/rfc6455#section-5.5.3
+				// > A Pong frame MAY be sent unsolicited.
+				// > This serves as a unidirectional heartbeat.
+				// > A response to an unsolicited Pong frame is
+				// > not expected.
+				ws.PayloadType = websocket.PongFrame
+				if _, err := ws.Write([]byte{}); err != nil {
+					h.log.Println("pong write:", err)
+					return
+				}
 			case msg := <-ch:
 				if err := websocket.Message.Send(ws, msg); err != nil {
 					h.log.Print(err)
