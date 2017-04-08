@@ -234,6 +234,9 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
+	if r.URL.Path == "/ping" {
+		return
+	}
 	token := r.URL.Query().Get("token")
 	if token == "" || len(token) > 64 {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
