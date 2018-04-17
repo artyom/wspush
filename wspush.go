@@ -1,3 +1,11 @@
+// Command wspush implements http service relaying redis pubsub messages to
+// websocket connections.
+//
+// wspush subscribes to redis channel(s) using "PSUBSCRIBE prefix*" command
+// where prefix can be set with -prefix flag. When it receives a message
+// published to "prefixFoo" channel, it looks up any connected client(s) with
+// query string parameter "token=Foo" and sends message to each client as
+// a single websocket binary frame.
 package main
 
 import (
