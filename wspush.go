@@ -43,7 +43,15 @@ func main() {
 	autoflags.Parse(args)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	dialFunc := func() (net.Conn, error) { return net.DialTimeout("tcp", args.Redis, 5*time.Second) }
+	dialFunc := func() (net.Conn, error) {
+		conn, err := net.DialTimeout("tcp", args.Redis, 5*time.Second)
+		if err != nil {
+			return nil, err
+		}
+		conn.(*net.TCPConn).SetKeepAlive(true)
+		conn.(*net.TCPConn).SetKeepAlivePeriod(time.Minute)
+		return conn, nil
+	}
 	log := log.New(os.Stderr, "", log.LstdFlags)
 	srv := &http.Server{
 		Addr:    args.Addr,
