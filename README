@@ -1,8 +1,13 @@
 Command wspush implements http service relaying redis pubsub messages to
-websocket connections.
+websocket connections or as server-sent events.
 
 wspush subscribes to redis channel(s) using "PSUBSCRIBE prefix*" command
 where prefix can be set with -prefix flag. When it receives a message
 published to "prefixFoo" channel, it looks up any connected client(s) with
 query string parameter "token=Foo" and sends message to each client as a
 single websocket binary frame.
+
+If client connects to path ending with /sse, or having "Accept:
+text/event-stream" header, messages are delivered as server-sent events
+(https://www.w3.org/TR/eventsource/), with default "message" event type. It
+is expected that message published to redis is valid utf8 string.

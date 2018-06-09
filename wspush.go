@@ -1,11 +1,16 @@
 // Command wspush implements http service relaying redis pubsub messages to
-// websocket connections.
+// websocket connections or as server-sent events.
 //
 // wspush subscribes to redis channel(s) using "PSUBSCRIBE prefix*" command
 // where prefix can be set with -prefix flag. When it receives a message
 // published to "prefixFoo" channel, it looks up any connected client(s) with
 // query string parameter "token=Foo" and sends message to each client as
 // a single websocket binary frame.
+//
+// If client connects to path ending with /sse, or having "Accept:
+// text/event-stream" header, messages are delivered as server-sent events
+// (https://www.w3.org/TR/eventsource/), with default "message" event type. It
+// is expected that message published to redis is valid utf8 string.
 package main
 
 import (
@@ -23,6 +28,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/artyom/autoflags"
 	"github.com/artyom/resp"
@@ -258,6 +264,56 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
+	const pingEvery = 45 * time.Second
+	if strings.HasSuffix(r.URL.Path, "/sse") || strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "Server-Sent Events are not supported", http.StatusNotImplemented)
+			return
+		}
+		ch, closeFn, ok := h.register(token)
+		if !ok {
+			return
+		}
+		defer closeFn()
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher.Flush()
+		ticker := time.NewTicker(pingEvery)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-h.ctx.Done():
+				return
+			case <-ticker.C:
+				// https://www.w3.org/TR/eventsource/#event-stream-interpretation
+				// "The steps to process the field" state that
+				// unknown field names should be ignored, so use
+				// unspecified "ping" field.
+				if _, err := w.Write([]byte("ping:\n\n")); err != nil {
+					panic(http.ErrAbortHandler)
+				}
+				flusher.Flush()
+			case msg := <-ch:
+				if len(msg) == 0 {
+					continue
+				}
+				if !utf8.ValidString(msg) {
+					h.log.Println("message is not a valid utf8 sequence")
+					panic(http.ErrAbortHandler)
+				}
+				for _, chunk := range strings.Split(msg, "\n") {
+					if _, err := fmt.Fprintf(w, "data:%s\n", chunk); err != nil {
+						panic(http.ErrAbortHandler)
+					}
+				}
+				if _, err := w.Write([]byte("\n")); err != nil {
+					panic(http.ErrAbortHandler)
+				}
+				flusher.Flush()
+			}
+		}
+	}
 	fn := func(ws *websocket.Conn) {
 		defer ws.Close()
 		ch, closeFn, ok := h.register(token)
@@ -265,7 +321,7 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer closeFn()
-		ticker := time.NewTicker(45 * time.Second)
+		ticker := time.NewTicker(pingEvery)
 		defer ticker.Stop()
 		for {
 			select {
