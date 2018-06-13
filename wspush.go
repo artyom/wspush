@@ -264,7 +264,8 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	const pingEvery = 45 * time.Second
+	ticker := time.NewTicker(45 * time.Second)
+	defer ticker.Stop()
 	if strings.HasSuffix(r.URL.Path, "/sse") || strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
 		flusher, ok := w.(http.Flusher)
 		if !ok {
@@ -279,8 +280,6 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		flusher.Flush()
-		ticker := time.NewTicker(pingEvery)
-		defer ticker.Stop()
 		for {
 			select {
 			case <-h.ctx.Done():
@@ -321,8 +320,6 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer closeFn()
-		ticker := time.NewTicker(pingEvery)
-		defer ticker.Stop()
 		for {
 			select {
 			case <-h.ctx.Done():
