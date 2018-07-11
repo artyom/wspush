@@ -1,0 +1,8 @@
+github.com/artyom/autoflags v1.1.0 h1:Cz3qb/qSkhmt/Zgsu3D/HwMJtKYUSV5kctI6O9bekv4=
+github.com/artyom/autoflags v1.1.0/go.mod h1:Th9KgAVvFcYp7t8b//Pu21xHjExLpzr4SXCbwVbHL7Y=
+github.com/artyom/resp v0.0.0-20170119170417-9548a1125f15 h1:sIPeP8thZwsJ4/53l0U6d6TpqOTQt/BVLr9ghIlRHGk=
+github.com/artyom/resp v0.0.0-20170119170417-9548a1125f15/go.mod h1:bPgkZ66JCWLt9ZBLfyiJExQw2zsN6DpNG17ZuBfUtFw=
+github.com/artyom/resp v1.0.0 h1:SVdA6KMZQ+NshbKtVd/gckbO4YIkZov8NhqL1QJbLXg=
+github.com/artyom/resp v1.0.0/go.mod h1:bPgkZ66JCWLt9ZBLfyiJExQw2zsN6DpNG17ZuBfUtFw=
+golang.org/x/net v0.0.0-20180417003750-8d16fa6dc9a8 h1:x78T1ffZeQiacNSxOb00nz8Y+6YRQ8Jc2nlHAgp3HZc=
+golang.org/x/net v0.0.0-20180417003750-8d16fa6dc9a8/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
