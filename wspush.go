@@ -332,12 +332,10 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				// > not expected.
 				ws.PayloadType = websocket.PongFrame
 				if _, err := ws.Write([]byte{}); err != nil {
-					h.log.Println("pong write:", err)
 					return
 				}
 			case msg := <-ch:
 				if err := websocket.Message.Send(ws, msg); err != nil {
-					h.log.Print(err)
 					return
 				}
 			}
