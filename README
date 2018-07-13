@@ -11,3 +11,8 @@ If client connects to path ending with /sse, or having "Accept:
 text/event-stream" header, messages are delivered as server-sent events
 (https://www.w3.org/TR/eventsource/), with default "message" event type. It
 is expected that message published to redis is valid utf8 string.
+
+If program started with -hmac flag set to base64 encoded (url-compatible,
+padless) secret key, this key is used to verify tokens, which then must be
+base64 encoded (url-compatible, padless) values of payload concatenated with
+its md5 HMAC signature.

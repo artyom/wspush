@@ -11,11 +11,19 @@
 // text/event-stream" header, messages are delivered as server-sent events
 // (https://www.w3.org/TR/eventsource/), with default "message" event type. It
 // is expected that message published to redis is valid utf8 string.
+//
+// If program started with -hmac flag set to base64 encoded (url-compatible,
+// padless) secret key, this key is used to verify tokens, which then must be
+// base64 encoded (url-compatible, padless) values of payload concatenated with
+// its md5 HMAC signature.
 package main
 
 import (
 	"bufio"
 	"context"
+	"crypto/hmac"
+	"crypto/md5"
+	"encoding/base64"
 	"expvar"
 	"fmt"
 	"io"
@@ -44,6 +52,7 @@ func main() {
 		Redis  string `flag:"redis,redis address"`
 		Prefix string `flag:"prefix,prefix for 'PSUBSCRIBE prefix*'"`
 		Expvar string `flag:"expvar,address to serve expvar statistics"`
+		Key    string `flag:"hmac,optional base64 (url-compatible, padless) encoded key for md5 HMAC verification"`
 	}{
 		Addr:   "localhost:8080",
 		Redis:  "localhost:6379",
@@ -63,6 +72,12 @@ func main() {
 	}
 	log := log.New(os.Stderr, "", log.LstdFlags)
 	handler := New(ctx, log, dialFunc, args.Prefix)
+	if args.Key != "" {
+		var err error
+		if handler.key, err = base64.RawURLEncoding.DecodeString(args.Key); err != nil {
+			log.Fatal("cannot decode key:", err)
+		}
+	}
 	if args.Expvar != "" {
 		expvar.Publish("wspush", handler)
 		ln, err := net.Listen("tcp", args.Expvar)
@@ -112,6 +127,7 @@ type hub struct {
 	ctx  context.Context
 	log  *log.Logger
 	next uint64 // next subscription id counter
+	key  []byte // non-nil value enables hmac verification of token
 	mu   sync.Mutex
 	m    map[string][]subscription
 
@@ -291,7 +307,7 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := r.URL.Query().Get("token")
-	if token == "" || len(token) > 64 {
+	if !h.tokenValid(token) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
@@ -375,4 +391,22 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	websocket.Handler(fn).ServeHTTP(w, r)
+}
+
+func (h *hub) tokenValid(token string) bool {
+	if token == "" || len(token) > 64 {
+		return false
+	}
+	if h.key == nil {
+		return true
+	}
+	data, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil || len(data) <= md5.Size {
+		return false
+	}
+	cutoff := len(data) - md5.Size
+	messageMAC := data[cutoff:]
+	mac := hmac.New(md5.New, h.key)
+	mac.Write(data[:cutoff])
+	return hmac.Equal(messageMAC, mac.Sum(nil))
 }
