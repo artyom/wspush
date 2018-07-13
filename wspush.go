@@ -16,6 +16,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"expvar"
 	"fmt"
 	"io"
 	"log"
@@ -23,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -41,6 +43,7 @@ func main() {
 		Addr   string `flag:"addr,address to listen"`
 		Redis  string `flag:"redis,redis address"`
 		Prefix string `flag:"prefix,prefix for 'PSUBSCRIBE prefix*'"`
+		Expvar string `flag:"expvar,address to serve expvar statistics"`
 	}{
 		Addr:   "localhost:8080",
 		Redis:  "localhost:6379",
@@ -59,9 +62,19 @@ func main() {
 		return conn, nil
 	}
 	log := log.New(os.Stderr, "", log.LstdFlags)
+	handler := New(ctx, log, dialFunc, args.Prefix)
+	if args.Expvar != "" {
+		expvar.Publish("wspush", handler)
+		ln, err := net.Listen("tcp", args.Expvar)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("exposing statistics on http://%s/debug/vars", ln.Addr())
+		go func() { log.Fatal(http.Serve(ln, nil)) }()
+	}
 	srv := &http.Server{
 		Addr:    args.Addr,
-		Handler: New(ctx, log, dialFunc, args.Prefix),
+		Handler: handler,
 	}
 	go func() {
 		sigCh := make(chan os.Signal, 1)
@@ -78,7 +91,7 @@ func main() {
 
 type DialFunc func() (net.Conn, error)
 
-func New(ctx context.Context, log *log.Logger, dial DialFunc, prefix string) http.Handler {
+func New(ctx context.Context, log *log.Logger, dial DialFunc, prefix string) *hub {
 	h := &hub{
 		ctx: ctx,
 		log: log,
@@ -101,6 +114,23 @@ type hub struct {
 	next uint64 // next subscription id counter
 	mu   sync.Mutex
 	m    map[string][]subscription
+
+	// statistics updated with atomics
+	delivers  uint64 // number of deliver method calls
+	successes uint64 // successful writes to client
+}
+
+// String returns json-encoded value of published counters; implements
+// expvar.Var.
+func (h *hub) String() string {
+	b := []byte(`{"sessions_seen": `)
+	b = strconv.AppendUint(b, atomic.LoadUint64(&h.next), 10)
+	b = append(b, `, "messages_seen": `...)
+	b = strconv.AppendUint(b, atomic.LoadUint64(&h.delivers), 10)
+	b = append(b, `, "successful_deliveries": `...)
+	b = strconv.AppendUint(b, atomic.LoadUint64(&h.successes), 10)
+	b = append(b, '}')
+	return string(b)
 }
 
 // register creates and registers channel to receive messages for given key,
@@ -144,6 +174,7 @@ func (h *hub) register(key string) (<-chan string, func(), bool) {
 // deliver pushes payload to channel registered at key, if any. Push is done in
 // a non-blocking manner, if channel is full, message is dropped.
 func (h *hub) deliver(key string, payload string) {
+	atomic.AddUint64(&h.delivers, 1)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, s := range h.m[key] {
@@ -309,6 +340,7 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if _, err := w.Write([]byte("\n")); err != nil {
 					panic(http.ErrAbortHandler)
 				}
+				atomic.AddUint64(&h.successes, 1)
 				flusher.Flush()
 			}
 		}
@@ -338,6 +370,7 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if err := websocket.Message.Send(ws, msg); err != nil {
 					return
 				}
+				atomic.AddUint64(&h.successes, 1)
 			}
 		}
 	}
