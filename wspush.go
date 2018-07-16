@@ -194,21 +194,21 @@ func (h *hub) deliver(key string, payload string) {
 // E.g.: given prefix "news.", message pushed to pubsub channel "news.foobar"
 // would be delivered to client subscribed to "foobar".
 func (h *hub) loop(ctx context.Context, dial DialFunc, prefix string) {
-	sleepCh := time.After(0)
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-sleepCh:
+		case <-ticker.C:
 		}
 		conn, err := dial()
 		if err != nil {
-			h.log.Print(err)
-			sleepCh = time.After(time.Second)
+			h.log.Print("redis dial:", err)
 			continue
 		}
 		if err := h.ingestPubSub(ctx, conn, prefix); err != nil {
-			h.log.Print(err)
+			h.log.Print("pubsub ingest:", err)
 		}
 	}
 }
