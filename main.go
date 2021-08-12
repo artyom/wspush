@@ -4,8 +4,8 @@
 // wspush subscribes to redis channel(s) using "PSUBSCRIBE prefix*" command
 // where prefix can be set with -prefix flag. When it receives a message
 // published to "prefixFoo" channel, it looks up any connected client(s) with
-// query string parameter "token=Foo" and sends message to each client as
-// a single websocket binary frame.
+// query string parameter "token=Foo" and sends message to each client as a
+// single websocket binary frame.
 //
 // If client connects to path ending with /sse, or having "Accept:
 // text/event-stream" header, messages are delivered as server-sent events
@@ -15,7 +15,8 @@
 // If program started with -hmac flag set to base64 encoded (url-compatible,
 // padless) secret key, this key is used to verify tokens, which then must be
 // base64 encoded (url-compatible, padless) values of payload concatenated with
-// its md5 HMAC signature.
+// its md5 HMAC signature. Alternatively, key value can also be passed with a
+// WSPUSH_KEY environment variable.
 package main
 
 import (
@@ -57,6 +58,7 @@ func main() {
 		Addr:   "localhost:8080",
 		Redis:  "localhost:6379",
 		Prefix: "example.",
+		Key:    os.Getenv("WSPUSH_KEY"),
 	}
 	autoflags.Parse(args)
 	ctx, cancel := context.WithCancel(context.Background())
