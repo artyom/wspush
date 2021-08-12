@@ -1,6 +1,11 @@
-github.com/artyom/autoflags v1.1.0 h1:Cz3qb/qSkhmt/Zgsu3D/HwMJtKYUSV5kctI6O9bekv4=
-github.com/artyom/autoflags v1.1.0/go.mod h1:Th9KgAVvFcYp7t8b//Pu21xHjExLpzr4SXCbwVbHL7Y=
+github.com/artyom/autoflags v1.1.1 h1:8flRmpb7xpjLHFVcM+HN+cEEKLw+H5a2hABDbRvfG9A=
+github.com/artyom/autoflags v1.1.1/go.mod h1:Th9KgAVvFcYp7t8b//Pu21xHjExLpzr4SXCbwVbHL7Y=
 github.com/artyom/resp v1.0.0 h1:SVdA6KMZQ+NshbKtVd/gckbO4YIkZov8NhqL1QJbLXg=
 github.com/artyom/resp v1.0.0/go.mod h1:bPgkZ66JCWLt9ZBLfyiJExQw2zsN6DpNG17ZuBfUtFw=
-golang.org/x/net v0.0.0-20180417003750-8d16fa6dc9a8 h1:x78T1ffZeQiacNSxOb00nz8Y+6YRQ8Jc2nlHAgp3HZc=
-golang.org/x/net v0.0.0-20180417003750-8d16fa6dc9a8/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
+golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d h1:20cMwl2fHAzkJMEA+8J4JgqBQcQGzbisXo31MIeenXI=
+golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d/go.mod h1:9nx3DQGgdP8bBQD5qxJ1jj9UTztislL4KSBs9R2vV5Y=
+golang.org/x/sys v0.0.0-20201119102817-f84b799fce68/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20210423082822-04245dca01da/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:bj7SfCRtBDWHUb9snDiAeCFNEtKQo2Wmx5Cou7ajbmo=
+golang.org/x/text v0.3.6/go.mod h1:5Zoc/QRtKVWzQhOtBMvqHzDpF6irO9z98xDceosuGiQ=
+golang.org/x/tools v0.0.0-20180917221912-90fa682c2a6e/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
