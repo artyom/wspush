@@ -1,10 +1,11 @@
-FROM golang:alpine AS builder
+FROM public.ecr.aws/docker/library/golang:alpine AS builder
+RUN apk add git
 WORKDIR /app
-ENV GOPROXY=https://proxy.golang.org CGO_ENABLED=0
+ENV CGO_ENABLED=0 GOFLAGS=-trimpath
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN go build -ldflags='-s -w' -trimpath -o wspush
+RUN go build -ldflags='-s -w' -o wspush
 
 FROM scratch
 COPY --from=builder /app/wspush /
