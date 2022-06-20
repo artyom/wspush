@@ -19,10 +19,13 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
       - name: Build, tag, and push
         run: |
-          # TAG=$(git describe --tags --always)
-          TAG=latest
+          TAG=$(git describe --tags --always)
           docker build -t ghcr.io/artyom/wspush:$TAG .
           docker push ghcr.io/artyom/wspush:$TAG
+          docker tag ghcr.io/artyom/wspush:$TAG ghcr.io/artyom/wspush:latest
+          docker push ghcr.io/artyom/wspush:latest
