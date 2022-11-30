@@ -110,7 +110,7 @@ func main() {
 
 type DialFunc func() (net.Conn, error)
 
-func New(ctx context.Context, log *log.Logger, dial DialFunc, prefix string, ping string) *hub {
+func New(ctx context.Context, log *log.Logger, dial DialFunc, prefix, ping string) *hub {
 	h := &hub{
 		ctx:  ctx,
 		log:  log,
@@ -133,9 +133,9 @@ type hub struct {
 	log  *log.Logger
 	next uint64 // next subscription id counter
 	key  []byte // non-nil value enables hmac verification of token
+	ping string
 	mu   sync.Mutex
 	m    map[string][]subscription
-	ping string
 
 	// statistics updated with atomics
 	delivers  uint64 // number of deliver method calls
@@ -333,15 +333,13 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		flusher.Flush()
-		var pingPayload []byte
-		if len(h.ping) > 0 {
+		// https://www.w3.org/TR/eventsource/#event-stream-interpretation
+		// "The steps to process the field" state that unknown
+		// field names should be ignored, so use unspecified
+		// "ping" field.
+		pingPayload := []byte("ping:\n\n")
+		if h.ping != "" {
 			pingPayload = []byte(fmt.Sprintf("data:%s\n\n", h.ping))
-		} else {
-			// https://www.w3.org/TR/eventsource/#event-stream-interpretation
-			// "The steps to process the field" state that unknown
-			// field names should be ignored, so use unspecified
-			// "ping" field.
-			pingPayload = []byte("ping:\n\n")
 		}
 		for {
 			select {
@@ -385,7 +383,7 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			case <-h.ctx.Done():
 				return
 			case <-ticker.C:
-				if len(h.ping) > 0 {
+				if h.ping != "" {
 					if err := websocket.Message.Send(ws, h.ping); err != nil {
 						return
 					}
