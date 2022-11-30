@@ -17,3 +17,8 @@ padless) secret key, this key is used to verify tokens, which then must be
 base64 encoded (url-compatible, padless) values of payload concatenated with
 its md5 HMAC signature. Alternatively, key value can also be passed with
 WSPUSH_KEY environment variable.
+
+If wspush is started with -ping set to some arbitrary payload, that payload will
+be sent as a heartbeat every 45 seconds. Otherwise, an empty ping will be sent
+instead ("ping" message for server-sent events, or unsollicited "pong" frame for
+websocket connections).

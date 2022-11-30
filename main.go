@@ -54,11 +54,13 @@ func main() {
 		Prefix string `flag:"prefix,prefix for 'PSUBSCRIBE prefix*'"`
 		Expvar string `flag:"expvar,address to serve expvar statistics"`
 		Key    string `flag:"hmac,optional base64 (url-compatible, padless) encoded key for md5 HMAC verification"`
+		Ping   string `flag:"ping,optional payload to send as heartbeat instead of a PONG control frame"`
 	}{
 		Addr:   "localhost:8080",
 		Redis:  "localhost:6379",
 		Prefix: "example.",
 		Key:    os.Getenv("WSPUSH_KEY"),
+		Ping:   os.Getenv("WSPUSH_PING"),
 	}
 	autoflags.Parse(args)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -73,7 +75,7 @@ func main() {
 		return conn, nil
 	}
 	log := log.New(os.Stderr, "", log.LstdFlags)
-	handler := New(ctx, log, dialFunc, args.Prefix)
+	handler := New(ctx, log, dialFunc, args.Prefix, args.Ping)
 	if args.Key != "" {
 		var err error
 		if handler.key, err = base64.RawURLEncoding.DecodeString(args.Key); err != nil {
@@ -108,11 +110,12 @@ func main() {
 
 type DialFunc func() (net.Conn, error)
 
-func New(ctx context.Context, log *log.Logger, dial DialFunc, prefix string) *hub {
+func New(ctx context.Context, log *log.Logger, dial DialFunc, prefix string, ping string) *hub {
 	h := &hub{
-		ctx: ctx,
-		log: log,
-		m:   make(map[string][]subscription),
+		ctx:  ctx,
+		log:  log,
+		m:    make(map[string][]subscription),
+		ping: ping,
 	}
 	go h.loop(ctx, dial, prefix)
 	return h
@@ -132,6 +135,7 @@ type hub struct {
 	key  []byte // non-nil value enables hmac verification of token
 	mu   sync.Mutex
 	m    map[string][]subscription
+	ping string
 
 	// statistics updated with atomics
 	delivers  uint64 // number of deliver method calls
@@ -329,16 +333,22 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		flusher.Flush()
+		var pingPayload []byte
+		if len(h.ping) > 0 {
+			pingPayload = []byte(fmt.Sprintf("data:%s\n\n", h.ping))
+		} else {
+			// https://www.w3.org/TR/eventsource/#event-stream-interpretation
+			// "The steps to process the field" state that unknown
+			// field names should be ignored, so use unspecified
+			// "ping" field.
+			pingPayload = []byte("ping:\n\n")
+		}
 		for {
 			select {
 			case <-h.ctx.Done():
 				return
 			case <-ticker.C:
-				// https://www.w3.org/TR/eventsource/#event-stream-interpretation
-				// "The steps to process the field" state that
-				// unknown field names should be ignored, so use
-				// unspecified "ping" field.
-				if _, err := w.Write([]byte("ping:\n\n")); err != nil {
+				if _, err := w.Write(pingPayload); err != nil {
 					panic(http.ErrAbortHandler)
 				}
 				flusher.Flush()
@@ -375,14 +385,20 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			case <-h.ctx.Done():
 				return
 			case <-ticker.C:
-				// https://tools.ietf.org/html/rfc6455#section-5.5.3
-				// > A Pong frame MAY be sent unsolicited.
-				// > This serves as a unidirectional heartbeat.
-				// > A response to an unsolicited Pong frame is
-				// > not expected.
-				ws.PayloadType = websocket.PongFrame
-				if _, err := ws.Write([]byte{}); err != nil {
-					return
+				if len(h.ping) > 0 {
+					if err := websocket.Message.Send(ws, h.ping); err != nil {
+						return
+					}
+				} else {
+					// https://tools.ietf.org/html/rfc6455#section-5.5.3
+					// > A Pong frame MAY be sent unsolicited.
+					// > This serves as a unidirectional heartbeat.
+					// > A response to an unsolicited Pong frame is
+					// > not expected.
+					ws.PayloadType = websocket.PongFrame
+					if _, err := ws.Write([]byte{}); err != nil {
+						return
+					}
 				}
 			case msg := <-ch:
 				if err := websocket.Message.Send(ws, msg); err != nil {
