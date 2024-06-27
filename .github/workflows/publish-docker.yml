@@ -23,6 +23,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
       - id: gen-tag
         run: |
           IMAGE_TAG=$(git describe --always)
